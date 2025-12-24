@@ -127,6 +127,7 @@ unsigned __stdcall MultiThreadFunc(void* pArguments)
 
 		sock[i] = accept(sock0[i], (struct sockaddr*)&client[i], &len[i]);
 
+		
 
 		if (sock[i] != INVALID_SOCKET)
 		{
