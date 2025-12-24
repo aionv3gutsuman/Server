@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <process.h>
 #include <winsock2.h>
+#include <ws2tcpip.h>
 
 #define CLIENTNUM 2
 
@@ -15,8 +16,8 @@ unsigned __stdcall MultiThreadFunc(void* pArguments);
 int main()
 {
 
-	HANDLE handles[CLIENTNUM] = { NULL,NULL };
-	unsigned threadID[CLIENTNUM] = { 0,0 };
+	HANDLE handles[CLIENTNUM] = { NULL, NULL };
+	unsigned threadID[CLIENTNUM] = { 0, 0 };
 
 	for (int i = 0; i < CLIENTNUM; ++i)
 	{
@@ -55,64 +56,155 @@ unsigned __stdcall MultiThreadFunc(void* pArguments)
 {
 	printf("ThreadNo.%d\n", (int)pArguments);
 
-	WSADATA wsaData;
-	SOCKET sock0;
-	struct sockaddr_in addr;
-	struct sockaddr_in client;
-	int len;
-	SOCKET sock;
-	int sendcheck;
-	int recvcheck;
+	WSADATA wsaData[CLIENTNUM];
+	SOCKET sock0[CLIENTNUM];
+	struct sockaddr_in addr[CLIENTNUM];
+	struct sockaddr_in client[CLIENTNUM];
+	int len[CLIENTNUM];
+	SOCKET sock[CLIENTNUM];
+	int sendcheck[CLIENTNUM];
+	int recvcheck[CLIENTNUM];
 
 
-	char buffer[256];
+	char buffersend[256];
+	char bufferrecv[256];
+	int i = 0;
 
-	WSAStartup(MAKEWORD(2, 0), &wsaData);
-
-	sock0 = socket(AF_INET, SOCK_STREAM, 0);
-
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(5321);
-	addr.sin_addr.S_un.S_addr = INADDR_ANY;
-
-	bind(sock0, (struct sockaddr*)&addr, sizeof(addr));
-
-	listen(sock0, 5);
-	len = sizeof(client);
-	while ((sock = accept(sock0, (struct sockaddr*)&client, &len)) == INVALID_SOCKET)
+	for (int i = 0; i < CLIENTNUM; i++)
 	{
-
-
-
-		closesocket(sock);
+		WSAStartup(MAKEWORD(2, 0), &wsaData[i]);
 	}
 
-	strcpy(buffer, "FROM SERVER");
-
-	while (1)
+	for (int i = 0; i < CLIENTNUM; i++)
 	{
-		sendcheck = send(sock, buffer, strlen(buffer), 0);
-		if (sendcheck != SOCKET_ERROR)
+		sock0[i] = socket(AF_INET, SOCK_STREAM, 0);
+	}
+
+	// --- ノンブロッキングモードに設定 ---
+	u_long mode[CLIENTNUM];
+
+	for (int i = 0; i < CLIENTNUM; i++)
+	{
+		mode[i] = 1;
+		ioctlsocket(sock0[i], FIONBIO, &mode[i]);
+	}
+
+
+	for (int i = 0; i < CLIENTNUM; i++)
+	{
+		addr[i].sin_family = AF_INET;
+		addr[i].sin_port = htons(5321);
+		addr[i].sin_addr.S_un.S_addr = INADDR_ANY;
+	}
+
+
+	for (int i = 0; i < CLIENTNUM; i++)
+	{
+		bind(sock0[i], (struct sockaddr*)&addr[i], sizeof(addr[i]));
+
+	}
+
+	for (int i = 0; i < CLIENTNUM; i++)
+	{
+		listen(sock0[i], 5);
+
+	}
+	
+
+	for (int i = 0; i < CLIENTNUM; i++)
+	{
+		len[i] = sizeof(client[i]);
+
+	}
+	
+	
+
+
+	i = 0;
+
+	do
+	{
+
+		sock[i] = accept(sock0[i], (struct sockaddr*)&client[i], &len[i]);
+
+
+		if (sock[i] != INVALID_SOCKET)
 		{
-			printf("SUCCESS SEND\n");
 			break;
 		}
-		closesocket(sock);
-	}
 
 
-	while (1)
-	{
-		recvcheck = recv(sock, buffer, strlen(buffer), 0);
-		if (sendcheck != SOCKET_ERROR)
+
+		if (i == 1)
 		{
-			printf("%s\n", buffer);
+			i = 0;
+		}
+
+		++i;
+
+	} while (1);
+
+
+
+	printf("*************************************************\n");
+	strcpy(buffersend, "FROM SERVER");
+
+
+
+	i = 0;
+
+
+	do
+	{
+
+		sendcheck[i] = send(sock[i], buffersend, strlen(buffersend), 0);
+
+
+		if (sendcheck[i] != SOCKET_ERROR)
+		{
 			break;
 		}
-		closesocket(sock);
-	}
+
+		if (i == 1)
+		{
+			i = 0;
+		}
 
 
+		++i;
+
+
+
+
+	} while (1);
+
+	i = 0;
+
+
+	do
+	{
+
+		recvcheck[i] = recv(sock[i], bufferrecv, strlen(bufferrecv), 0);
+
+
+
+		if (recvcheck[i] != SOCKET_ERROR)
+		{
+			break;
+		}
+
+		if (i == 1)
+		{
+			i = 0;
+		}
+
+		++i;
+
+	} while (1);
+
+
+
+	closesocket(sock);
 	WSACleanup();
 
 
