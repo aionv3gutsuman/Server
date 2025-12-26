@@ -42,6 +42,7 @@ unsigned __stdcall MultiThreadFunc(void* pArguments)
 	SOCKET clientSock[CLIENTNUM];
 	struct sockaddr_in clientAddr;
 	int clientLen = sizeof(clientAddr);
+	int recvcheck[CLIENTNUM];
 
 	char buffersend[256] = { 0 };
 	char bufferrecv[256] = { 0 };
@@ -99,7 +100,7 @@ unsigned __stdcall MultiThreadFunc(void* pArguments)
 						{
 							printf("ポート6000\n");
 						}
-						Sleep(20000);
+						//Sleep(20000);
 						goto ACCEPTED;
 					}
 				}
@@ -109,18 +110,76 @@ unsigned __stdcall MultiThreadFunc(void* pArguments)
 
 ACCEPTED:
 
-	// --- 送信 ---
-	strcpy(buffersend, "FROM SERVER");
-	send(clientSock, buffersend, strlen(buffersend), 0);
+// --- 送信 ---
+strcpy(buffersend, "FROM SERVER");
 
-	// --- 受信 ---
-	int recvcheck = recv(clientSock, bufferrecv, sizeof(bufferrecv), 0);
-	if (recvcheck > 0)
+while (1)
+{
+    for (int i = 0; i < CLIENTNUM; i++)
+    {
+        if (clientSock[i] == INVALID_SOCKET)
+            continue;
+
+        fd_set wfds;
+        FD_ZERO(&wfds);
+        FD_SET(clientSock[i], &wfds);
+
+        TIMEVAL tv;
+        tv.tv_sec = 5;
+        tv.tv_usec = 0;
+
+        int ret = select(0, NULL, &wfds, NULL, &tv);
+
+        if (ret > 0 && FD_ISSET(clientSock[i], &wfds))
+        {
+            int sret = send(clientSock[i], buffersend, strlen(buffersend), 0);
+
+            if (sret > 0)
+            {
+                printf("send成功 (client %d)\n", i);
+                goto SEND;
+            }
+            else
+            {
+                int err = WSAGetLastError();
+                if (err != WSAEWOULDBLOCK)
+                {
+                    printf("send error: %d\n", err);
+                }
+            }
+        }
+    }
+
+    Sleep(1); // CPU暴走防止
+}
+
+SEND:
+	
+
+
+	while (1)
 	{
-		printf("RECV: %s\n", bufferrecv);
+		for (int i = 0; i < CLIENTNUM; i++)
+		{
+
+			recvcheck[i] = recv(clientSock[i], bufferrecv, sizeof(bufferrecv), 0);
+			if (recvcheck[i] > 0)
+			{
+				printf("RECV: %s\n", bufferrecv);
+				goto RECV;
+			}
+		}
 	}
 
-	closesocket(clientSock);
+
+RECV:
+
+
+	for (int i = 0; i < CLIENTNUM; i++)
+	{
+		if (clientSock[i] != INVALID_SOCKET)
+			closesocket(clientSock[i]);
+	}
 	closesocket(sock0[0]);
 	closesocket(sock0[1]);
 	WSACleanup();
