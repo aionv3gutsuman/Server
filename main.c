@@ -2,7 +2,7 @@
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#include <windows.h>   // 必要なら「必ず」winsock2.h の後
+#include <windows.h>
 #include <stdio.h>
 #include <process.h>
 
@@ -36,153 +36,118 @@ unsigned __stdcall MultiThreadFunc(void* pArguments)
 {
 	printf("ThreadNo.%d\n", (int)pArguments);
 
-	WSADATA wsaData[CLIENTNUM];
-	SOCKET sock0[CLIENTNUM];
+	WSADATA wsaData;
+	WSAStartup(MAKEWORD(2, 0), &wsaData);
+
+	SOCKET listenSock[CLIENTNUM];
+	SOCKET clientSock[CLIENTNUM] = { INVALID_SOCKET, INVALID_SOCKET };
 	struct sockaddr_in addr[CLIENTNUM];
-	SOCKET clientSock[CLIENTNUM];
 	struct sockaddr_in clientAddr;
 	int clientLen = sizeof(clientAddr);
-	int recvcheck[CLIENTNUM];
 
-	char buffersend[256] = { 0 };
-	char bufferrecv[256] = { 0 };
+	char buffersend[256] = "FROM SERVER";
+	char bufferrecv[256];
 
+	// --- リッスンソケット作成 ---
 	for (int i = 0; i < CLIENTNUM; i++)
 	{
-		WSAStartup(MAKEWORD(2, 0), &wsaData[i]);
-	}
-
-	
-
-	// --- 2つのリッスンソケットを作成 ---
-	for (int i = 0; i < CLIENTNUM; i++)
-	{
-		sock0[i] = socket(AF_INET, SOCK_STREAM, 0);
+		listenSock[i] = socket(AF_INET, SOCK_STREAM, 0);
 
 		u_long mode = 1;
-		ioctlsocket(sock0[i], FIONBIO, &mode);
+		ioctlsocket(listenSock[i], FIONBIO, &mode);
 
 		addr[i].sin_family = AF_INET;
-		addr[i].sin_addr.S_un.S_addr = INADDR_ANY;
+		addr[i].sin_addr.s_addr = INADDR_ANY;
 		addr[i].sin_port = htons(i == 0 ? 5000 : 6000);
 
-		bind(sock0[i], (struct sockaddr*)&addr[i], sizeof(addr[i]));
-		listen(sock0[i], 5);
+		bind(listenSock[i], (struct sockaddr*)&addr[i], sizeof(addr[i]));
+		listen(listenSock[i], 5);
 	}
 
-	// --- select で accept 待ち ---
-	fd_set rfds;
-	printf("Waiting for connection...\n");
+	printf("Waiting for 2 clients...\n");
 
-	while (1)
+	// --- 2台のクライアントが接続されるまで待つ ---
+	int connectedCount = 0;
+
+	while (connectedCount < CLIENTNUM)
 	{
+		fd_set rfds;
 		FD_ZERO(&rfds);
-		FD_SET(sock0[0], &rfds);
-		FD_SET(sock0[1], &rfds);
+		FD_SET(listenSock[0], &rfds);
+		FD_SET(listenSock[1], &rfds);
 
-		int ret = select(0, &rfds, NULL, NULL, NULL);
+		select(0, &rfds, NULL, NULL, NULL);
 
-		if (ret > 0)
+		for (int i = 0; i < CLIENTNUM; i++)
 		{
-			for (int i = 0; i < CLIENTNUM; i++)
+			if (FD_ISSET(listenSock[i], &rfds))
 			{
-				if (FD_ISSET(sock0[i], &rfds))
+				SOCKET cs = accept(listenSock[i], (struct sockaddr*)&clientAddr, &clientLen);
+				if (cs != INVALID_SOCKET)
 				{
-					clientSock[i] = accept(sock0[i], (struct sockaddr*)&clientAddr, &clientLen);
-					if (clientSock[i] != INVALID_SOCKET)
-					{
+					clientSock[i] = cs;
+					connectedCount++;
 
-						if (i == 0)
-						{
-							printf("ポート5000\n");
-						}
-						if (i == 1)
-						{
-							printf("ポート6000\n");
-						}
-						//Sleep(20000);
-						goto ACCEPTED;
-					}
+					printf("Client connected on port %d\n", (i == 0 ? 5000 : 6000));
 				}
 			}
 		}
 	}
 
-ACCEPTED:
+	printf("Both clients connected!\n");
 
-// --- 送信 ---
-strcpy(buffersend, "FROM SERVER");
-
-while (1)
-{
-    for (int i = 0; i < CLIENTNUM; i++)
-    {
-        if (clientSock[i] == INVALID_SOCKET)
-            continue;
-
-        fd_set wfds;
-        FD_ZERO(&wfds);
-        FD_SET(clientSock[i], &wfds);
-
-        TIMEVAL tv;
-        tv.tv_sec = 5;
-        tv.tv_usec = 0;
-
-        int ret = select(0, NULL, &wfds, NULL, &tv);
-
-        if (ret > 0 && FD_ISSET(clientSock[i], &wfds))
-        {
-            int sret = send(clientSock[i], buffersend, strlen(buffersend), 0);
-
-            if (sret > 0)
-            {
-                printf("send成功 (client %d)\n", i);
-                goto SEND;
-            }
-            else
-            {
-                int err = WSAGetLastError();
-                if (err != WSAEWOULDBLOCK)
-                {
-                    printf("send error: %d\n", err);
-                }
-            }
-        }
-    }
-
-    Sleep(1); // CPU暴走防止
-}
-
-SEND:
-	
-
-
+	// --- メインループ（送受信を同時監視） ---
 	while (1)
 	{
+		fd_set rfds, wfds;
+		FD_ZERO(&rfds);
+		FD_ZERO(&wfds);
+
 		for (int i = 0; i < CLIENTNUM; i++)
 		{
-
-			recvcheck[i] = recv(clientSock[i], bufferrecv, sizeof(bufferrecv), 0);
-			if (recvcheck[i] > 0)
+			if (clientSock[i] != INVALID_SOCKET)
 			{
-				printf("RECV: %s\n", bufferrecv);
-				goto RECV;
+				FD_SET(clientSock[i], &rfds);
+				FD_SET(clientSock[i], &wfds);
 			}
 		}
+
+		TIMEVAL tv = { 1, 0 };
+		int ret = select(0, &rfds, &wfds, NULL, &tv);
+
+		if (ret > 0)
+		{
+			for (int i = 0; i < CLIENTNUM; i++)
+			{
+				// --- 送信可能なら送信 ---
+				if (FD_ISSET(clientSock[i], &wfds))
+				{
+					send(clientSock[i], buffersend, strlen(buffersend), 0);
+				}
+
+				// --- 受信可能なら受信 ---
+				if (FD_ISSET(clientSock[i], &rfds))
+				{
+					int r = recv(clientSock[i], bufferrecv, sizeof(bufferrecv)-1, 0);
+
+					if (r > 0)
+					{
+						bufferrecv[r] = '\0';
+						printf("Client %d RECV: %s\n", i, bufferrecv);
+					}
+					else if (r == 0)
+					{
+						printf("Client %d disconnected\n", i);
+						closesocket(clientSock[i]);
+						clientSock[i] = INVALID_SOCKET;
+					}
+				}
+			}
+		}
+
+		Sleep(1);
 	}
 
-
-RECV:
-
-
-	for (int i = 0; i < CLIENTNUM; i++)
-	{
-		if (clientSock[i] != INVALID_SOCKET)
-			closesocket(clientSock[i]);
-	}
-	closesocket(sock0[0]);
-	closesocket(sock0[1]);
 	WSACleanup();
-
 	return 0;
 }
