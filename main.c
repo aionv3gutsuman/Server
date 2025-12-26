@@ -36,7 +36,7 @@ unsigned __stdcall MultiThreadFunc(void* pArguments)
 {
 	printf("ThreadNo.%d\n", (int)pArguments);
 
-	WSADATA wsaData;
+	WSADATA wsaData[CLIENTNUM];
 	SOCKET sock0[CLIENTNUM];
 	struct sockaddr_in addr[CLIENTNUM];
 	SOCKET clientSock = INVALID_SOCKET;
@@ -46,7 +46,12 @@ unsigned __stdcall MultiThreadFunc(void* pArguments)
 	char buffersend[256] = { 0 };
 	char bufferrecv[256] = { 0 };
 
-	WSAStartup(MAKEWORD(2, 0), &wsaData);
+	for (int i = 0; i < CLIENTNUM; i++)
+	{
+		WSAStartup(MAKEWORD(2, 0), &wsaData[i]);
+	}
+
+	
 
 	// --- 2つのリッスンソケットを作成 ---
 	for (int i = 0; i < CLIENTNUM; i++)
@@ -86,7 +91,7 @@ unsigned __stdcall MultiThreadFunc(void* pArguments)
 					if (clientSock != INVALID_SOCKET)
 					{
 						printf("Accepted on port %d\n", ntohs(addr[i].sin_port));
-						//Sleep(20000);              このコードのコメントアウトを外すと接続完了が確認できます
+						Sleep(20000);
 						goto ACCEPTED;
 					}
 				}
