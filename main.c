@@ -1,3 +1,6 @@
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
+
+
 #include <stdio.h>
 #include <process.h>
 #include <winsock2.h>
@@ -93,8 +96,15 @@ unsigned __stdcall MultiThreadFunc(void* pArguments)
 	for (int i = 0; i < CLIENTNUM; i++)
 	{
 		addr[i].sin_family = AF_INET;
-		addr[i].sin_port = htons(5321);
+		addr[i].sin_port = htons(5000);
 		addr[i].sin_addr.S_un.S_addr = INADDR_ANY;
+
+		if (i == 1)
+		{
+			addr[i].sin_family = AF_INET;
+			addr[i].sin_port = htons(6000);
+			addr[i].sin_addr.S_un.S_addr = INADDR_ANY;
+		}
 	}
 
 
