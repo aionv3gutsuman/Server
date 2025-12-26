@@ -39,7 +39,7 @@ unsigned __stdcall MultiThreadFunc(void* pArguments)
 	WSADATA wsaData[CLIENTNUM];
 	SOCKET sock0[CLIENTNUM];
 	struct sockaddr_in addr[CLIENTNUM];
-	SOCKET clientSock = INVALID_SOCKET;
+	SOCKET clientSock[CLIENTNUM];
 	struct sockaddr_in clientAddr;
 	int clientLen = sizeof(clientAddr);
 
@@ -87,10 +87,18 @@ unsigned __stdcall MultiThreadFunc(void* pArguments)
 			{
 				if (FD_ISSET(sock0[i], &rfds))
 				{
-					clientSock = accept(sock0[i], (struct sockaddr*)&clientAddr, &clientLen);
-					if (clientSock != INVALID_SOCKET)
+					clientSock[i] = accept(sock0[i], (struct sockaddr*)&clientAddr, &clientLen);
+					if (clientSock[i] != INVALID_SOCKET)
 					{
-						printf("Accepted on port %d\n", ntohs(addr[i].sin_port));
+
+						if (i == 0)
+						{
+							printf("ポート5000\n");
+						}
+						if (i == 1)
+						{
+							printf("ポート6000\n");
+						}
 						Sleep(20000);
 						goto ACCEPTED;
 					}
